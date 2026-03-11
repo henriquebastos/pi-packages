@@ -6,6 +6,8 @@ pi install @ssweens/pi-compaxxt
 
 Enhanced compaction for [pi](https://github.com/badlogic/pi-mono). Two improvements to every compaction, zero extra LLM calls.
 
+![pi-compaxxt context compaction](screenshot.png)
+
 ## Features
 
 ### Session Context

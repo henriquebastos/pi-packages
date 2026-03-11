@@ -2,6 +2,8 @@
 
 Ask a quick side question about your current coding session without interrupting the main agent or cluttering your history.
 
+![pi-qq quick question pager](screenshot.png)
+
 ## Usage
 
 ```
