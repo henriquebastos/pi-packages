@@ -399,6 +399,9 @@ export class AskUserDialog implements Component, Focusable {
 		// ── Freeform row ─────────────────────────────────────────
 		const isOnFreeform = this.selectedIdx === freeformIdx;
 		const otherNum = `${freeformIdx + 1}.`;
+		const prefixWidth = 2; // "  " or "> "
+		const numWidth = otherNum.length + 1; // e.g., "4. "
+		const contentWidth = Math.max(10, width - prefixWidth - numWidth - 2); // -2 for cursor/checkmark space
 
 		if (isOnFreeform) {
 			const inputVal = this.freeformInput.getValue();
@@ -409,16 +412,44 @@ export class AskUserDialog implements Component, Focusable {
 				const row = `  ${t.fg("accent", `> ${otherNum}`)} ${cursorChar}${t.fg("dim", placeholder.slice(1))}`;
 				lines.push(truncateToWidth(row, width));
 			} else {
-				// Block cursor after typed text — no checkmark until Enter confirms
-				const row = `  ${t.fg("accent", `> ${otherNum} ${inputVal}`)}${BLOCK_CURSOR}`;
-				lines.push(truncateToWidth(row, width));
+				// Wrap the input value across multiple lines
+				const prefix = `  ${t.fg("accent", `> ${otherNum} `)}`;
+				const wrappedLines = wrapTextWithAnsi(inputVal, contentWidth);
+				for (let i = 0; i < wrappedLines.length; i++) {
+					if (i === 0) {
+						// First line gets the prefix and cursor
+						lines.push(truncateToWidth(`${prefix}${wrappedLines[i]}${BLOCK_CURSOR}`, width));
+					} else {
+						// Continuation lines get indented padding to align with content
+						const padding = " ".repeat(prefixWidth + numWidth + 1);
+						lines.push(truncateToWidth(`${padding}${wrappedLines[i]}`, width));
+					}
+				}
 			}
 		} else if (freeformValue && this.confirmedFreeform.has(q.question)) {
-			// Confirmed — show with checkmark
-			lines.push(truncateToWidth(`    ${t.fg("accent", `${otherNum} ${freeformValue}`)} ${t.fg("success", "✓")}`, width));
+			// Confirmed — show with checkmark, wrapped across multiple lines
+			const prefix = `    ${otherNum} `;
+			const wrappedLines = wrapTextWithAnsi(freeformValue, contentWidth);
+			for (let i = 0; i < wrappedLines.length; i++) {
+				if (i === 0) {
+					lines.push(truncateToWidth(`${prefix}${t.fg("accent", wrappedLines[i])} ${t.fg("success", "✓")}`, width));
+				} else {
+					const padding = " ".repeat(prefixWidth + numWidth + 1);
+					lines.push(truncateToWidth(`${padding}${wrappedLines[i]}`, width));
+				}
+			}
 		} else if (freeformValue) {
-			// Typed but not yet confirmed — show without checkmark
-			lines.push(truncateToWidth(`    ${t.fg("dim", `${otherNum} ${freeformValue}`)}`, width));
+			// Typed but not yet confirmed — show without checkmark, wrapped
+			const prefix = `    ${otherNum} `;
+			const wrappedLines = wrapTextWithAnsi(freeformValue, contentWidth);
+			for (let i = 0; i < wrappedLines.length; i++) {
+				if (i === 0) {
+					lines.push(truncateToWidth(`${prefix}${t.fg("dim", wrappedLines[i])}`, width));
+				} else {
+					const padding = " ".repeat(prefixWidth + numWidth + 1);
+					lines.push(truncateToWidth(`${padding}${wrappedLines[i]}`, width));
+				}
+			}
 		} else {
 			// Not active, empty
 			lines.push(truncateToWidth(`    ${otherNum} ${t.fg("dim", "Type something.")}`, width));

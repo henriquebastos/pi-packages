@@ -17,6 +17,7 @@ import type { TextContent } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { AskUserDialog, type AskUserDialogResult } from "./lib/ask-user-dialog.js";
+import { PermissionDialog, type PermissionDialogResult } from "./lib/permission-dialog.js";
 import { isSafeCommand } from "./lib/utils.js";
 
 // Tools
@@ -201,21 +202,34 @@ Huddle mode note: In huddle mode, use this tool to clarify requirements or choos
 			const path = event.input.path || event.input.file || "unknown";
 			const theme = ctx.ui.theme;
 			const title = `${theme.fg("warning", theme.bold("⚠ Huddle Mode"))} — ${theme.fg("accent", toolName)}: ${theme.fg("accent", path)}`;
-			const choice = await ctx.ui.select(title, [
-				"Allow",
-				"Deny",
-				"Deny with feedback",
-			]);
 
-			if (choice === "Allow") return;
+			const result = await ctx.ui.custom<PermissionDialogResult>(
+				(tui, t, _kb, done) => {
+					const dialog = new PermissionDialog(title, undefined, t);
+					dialog.onDone = (r) => done(r);
+					return {
+						get focused() { return dialog.focused; },
+						set focused(v: boolean) { dialog.focused = v; },
+						render: (w: number) => dialog.render(w),
+						invalidate: () => dialog.invalidate(),
+						handleInput: (data: string) => {
+							dialog.handleInput(data);
+							tui.requestRender();
+						},
+					};
+				},
+			);
 
-			let reason = `User denied ${toolName} on "${path}" in huddle mode`;
-			if (choice === "Deny with feedback") {
-				const feedback = await ctx.ui.input("Why? (feedback sent to agent):");
-				reason = feedback 
-					? `User denied ${toolName} on "${path}". Feedback from user: ${feedback}`
-					: `User denied ${toolName} on "${path}" in huddle mode (no feedback provided)`;
+			// Cancelled (Esc) - treat as deny
+			if (!result) {
+				return { block: true, reason: `User cancelled permission prompt for ${toolName} on "${path}" in huddle mode` };
 			}
+
+			if (result.allowed) return;
+
+			const reason = result.feedback
+				? `User denied ${toolName} on "${path}". Feedback from user: ${result.feedback}`
+				: `User denied ${toolName} on "${path}" in huddle mode (no feedback provided)`;
 
 			return { block: true, reason };
 		}
@@ -225,21 +239,34 @@ Huddle mode note: In huddle mode, use this tool to clarify requirements or choos
 			if (!isSafeCommand(command)) {
 				const theme = ctx.ui.theme;
 				const title = `${theme.fg("warning", theme.bold("⚠ Huddle Mode"))} — ${theme.fg("accent", command)}`;
-				const choice = await ctx.ui.select(title, [
-					"Allow",
-					"Deny",
-					"Deny with feedback",
-				]);
 
-				if (choice === "Allow") return;
+				const result = await ctx.ui.custom<PermissionDialogResult>(
+					(tui, t, _kb, done) => {
+						const dialog = new PermissionDialog(title, undefined, t);
+						dialog.onDone = (r) => done(r);
+						return {
+							get focused() { return dialog.focused; },
+							set focused(v: boolean) { dialog.focused = v; },
+							render: (w: number) => dialog.render(w),
+							invalidate: () => dialog.invalidate(),
+							handleInput: (data: string) => {
+								dialog.handleInput(data);
+								tui.requestRender();
+							},
+						};
+					},
+				);
 
-				let reason = `User denied bash command in huddle mode: \`${command}\``;
-				if (choice === "Deny with feedback") {
-					const feedback = await ctx.ui.input("Why? (feedback sent to agent):");
-					reason = feedback 
-						? `User denied bash command \`${command}\`. Feedback from user: ${feedback}`
-						: `User denied bash command \`${command}\` in huddle mode (no feedback provided)`;
+				// Cancelled (Esc) - treat as deny
+				if (!result) {
+					return { block: true, reason: `User cancelled permission prompt for bash command in huddle mode: \`${command}\`` };
 				}
+
+				if (result.allowed) return;
+
+				const reason = result.feedback
+					? `User denied bash command \`${command}\`. Feedback from user: ${result.feedback}`
+					: `User denied bash command \`${command}\` in huddle mode (no feedback provided)`;
 
 				return { block: true, reason };
 			}
