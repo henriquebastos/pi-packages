@@ -18,6 +18,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { compact } from "@mariozechner/pi-coding-agent";
+import { GoogleAuth } from "google-auth-library";
 
 // ---------------------------------------------------------------------------
 // Session context block
@@ -46,6 +47,33 @@ function buildSessionContextBlock(
 
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
+
+/**
+ * Get an OAuth2 access token for Vertex AI.
+ * Used instead of the model registry API key (which is just the GCP project ID).
+ */
+async function getVertexAccessToken(): Promise<string> {
+	const auth = new GoogleAuth({
+		scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+	});
+	const client = await auth.getClient();
+	const token = await client.getAccessToken();
+	if (!token.token) {
+		throw new Error("Failed to obtain Vertex OAuth2 access token");
+	}
+	return token.token;
+}
+
+/**
+ * Resolve the correct API key for compaction.
+ * For Vertex models, returns a fresh OAuth2 token instead of the project ID.
+ */
+async function resolveApiKey(provider: string | undefined, registryApiKey: string): Promise<string> {
+	if (provider === "vertex") {
+		return getVertexAccessToken();
+	}
+	return registryApiKey;
+}
 
 function isRetryableError(error: unknown): boolean {
 	if (error instanceof Error) {
@@ -174,6 +202,8 @@ export default function (pi: ExtensionAPI) {
 		const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
 		if (!apiKey) return;
 
+		const effectiveApiKey = await resolveApiKey(ctx.model?.provider, apiKey);
+
 		const { preparation, customInstructions: userInstructions, signal } = event;
 
 		// Equivalent to computeFileLists() from compaction/utils — not re-exported by the package
@@ -220,7 +250,7 @@ ${fileLines.join("\n\n")}`;
 					compact(
 						preparation,
 						ctx.model,
-						apiKey,
+						effectiveApiKey,
 						combinedInstructions || undefined,
 						signal,
 					),

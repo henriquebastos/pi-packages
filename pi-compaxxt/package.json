@@ -22,6 +22,9 @@
       "skills"
     ]
   },
+  "dependencies": {
+    "google-auth-library": "^9.0.0"
+  },
   "peerDependencies": {
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
