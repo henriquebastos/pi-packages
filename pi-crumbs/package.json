@@ -1,0 +1,42 @@
+{
+  "name": "@ssweens/pi-crumbs",
+  "version": "1.0.0",
+  "description": "Leave a trail of crumbs - file operation tracking for Pi coding agent with diff generation and audit trail",
+  "type": "module",
+  "main": "src/index.ts",
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "echo 'nothing to clean'",
+    "build": "echo 'nothing to build'",
+    "check": "echo 'nothing to check'"
+  },
+  "dependencies": {
+    "diff": "^8.0.0"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "audit",
+    "diff",
+    "history",
+    "trail",
+    "crumbs"
+  ],
+  "author": "ssweens",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}
