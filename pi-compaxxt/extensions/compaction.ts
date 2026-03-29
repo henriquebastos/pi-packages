@@ -18,7 +18,6 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { compact } from "@mariozechner/pi-coding-agent";
-import { GoogleAuth } from "google-auth-library";
 
 // ---------------------------------------------------------------------------
 // Session context block
@@ -49,28 +48,20 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 
 /**
- * Get an OAuth2 access token for Vertex AI.
- * Used instead of the model registry API key (which is just the GCP project ID).
+ * Resolve the API key to pass to compact().
+ *
+ * Both Vertex providers handle their own auth internally and must NOT receive
+ * a project ID as an API key — it gets forwarded to the model client which
+ * misinterprets it as a Vertex AI API key, causing 401 UNAUTHENTICATED errors.
+ *
+ * - "vertex"        (pi-vertex): custom streamSimple ignores apiKey entirely, uses ADC/OAuth2
+ * - "google-vertex" (built-in):  uses ADC when apiKey is undefined, project ID as API key otherwise
+ *
+ * For all other providers, pass the registry key unchanged.
  */
-async function getVertexAccessToken(): Promise<string> {
-	const auth = new GoogleAuth({
-		scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-	});
-	const client = await auth.getClient();
-	const token = await client.getAccessToken();
-	if (!token.token) {
-		throw new Error("Failed to obtain Vertex OAuth2 access token");
-	}
-	return token.token;
-}
-
-/**
- * Resolve the correct API key for compaction.
- * For Vertex models, returns a fresh OAuth2 token instead of the project ID.
- */
-async function resolveApiKey(provider: string | undefined, registryApiKey: string): Promise<string> {
-	if (provider === "vertex") {
-		return getVertexAccessToken();
+function resolveApiKey(provider: string | undefined, registryApiKey: string): string | undefined {
+	if (provider === "vertex" || provider === "google-vertex") {
+		return undefined;
 	}
 	return registryApiKey;
 }
@@ -202,7 +193,7 @@ export default function (pi: ExtensionAPI) {
 		const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
 		if (!apiKey) return;
 
-		const effectiveApiKey = await resolveApiKey(ctx.model?.provider, apiKey);
+		const effectiveApiKey = resolveApiKey(ctx.model?.provider, apiKey);
 
 		const { preparation, customInstructions: userInstructions, signal } = event;
 
