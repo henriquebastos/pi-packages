@@ -1,13 +1,5 @@
 /**
  * pi-crumbs - Leave a trail of crumbs to follow your changes
- *
- * File operation tracking for Pi coding agent.
- * Captures before/after states of edit/write/delete operations
- * and stores them as custom entries in the session.
- *
- * Custom entry types:
- * - file_op: Records edit/create/delete with before/after hashes
- * - condensed: Marks file_ops as committed
  */
 
 import type { ExtensionAPI, ExtensionContext, SessionManager } from '@mariozechner/pi-coding-agent';
@@ -75,8 +67,7 @@ function getSessionState(ctx: ExtensionContext): SessionState | null {
 function getFileOpType(toolName: string, args: Record<string, unknown>): FileOpType {
   if (toolName === 'delete') return 'delete';
   if (toolName === 'write') {
-    // write is "create" if file doesn't exist, "edit" if it does
-    const filePath = args.file_path as string;
+    const filePath = (args.file_path || args.path) as string;
     return existsSync(filePath) ? 'edit' : 'create';
   }
   return 'edit';
@@ -86,59 +77,58 @@ function getFileOpType(toolName: string, args: Record<string, unknown>): FileOpT
  * Handle tool execution start
  */
 async function onToolExecutionStart(event: ToolExecutionStartEvent, ctx: ExtensionContext): Promise<void> {
-  const { toolCallId, toolName, args } = event;
-
-  // Only track specific tools
-  if (!TRACKED_TOOLS.includes(toolName)) return;
-
-  const state = getSessionState(ctx);
-  if (!state) return;
-
-  const filePath = args.file_path as string;
-  if (!filePath) return;
-
-  // Capture before state
-  const toolCallState: ToolCallState = { path: filePath };
-
   try {
+    const { toolCallId, toolName, args } = event;
+
+    // Only track specific tools
+    if (!TRACKED_TOOLS.includes(toolName)) return;
+
+    const state = getSessionState(ctx);
+    if (!state) return;
+
+    const filePath = (args.file_path || args.path) as string;
+    if (!filePath) return;
+
+    // Capture before state
+    const toolCallState: ToolCallState = { path: filePath };
+
     if (existsSync(filePath)) {
       const content = await readFile(filePath);
       const hash = sha256(content);
       toolCallState.beforeHash = hash;
       await state.objectStore.store(hash, content);
     }
-  } catch {
-    // File may not be readable - that's okay
-  }
 
-  state.toolCalls.set(toolCallId, toolCallState);
+    state.toolCalls.set(toolCallId, toolCallState);
+  } catch (err) {
+    console.error('[pi-crumbs] Error in onToolExecutionStart:', err);
+  }
 }
 
 /**
  * Handle tool execution end
  */
 async function onToolExecutionEnd(event: ToolExecutionEndEvent, ctx: ExtensionContext): Promise<void> {
-  const { toolCallId, toolName, isError } = event;
-
-  // Only track specific tools
-  if (!TRACKED_TOOLS.includes(toolName)) return;
-
-  // Don't record failed operations
-  if (isError) return;
-
-  const state = getSessionState(ctx);
-  if (!state) return;
-
-  const toolCallState = state.toolCalls.get(toolCallId);
-  if (!toolCallState) return;
-
-  const { path, beforeHash } = toolCallState;
-  let afterHash: string | undefined;
-
-  // Capture after state
   try {
+    const { toolCallId, toolName, isError } = event;
+
+    // Only track specific tools
+    if (!TRACKED_TOOLS.includes(toolName)) return;
+
+    // Don't record failed operations
+    if (isError) return;
+
+    const state = getSessionState(ctx);
+    if (!state) return;
+
+    const toolCallState = state.toolCalls.get(toolCallId);
+    if (!toolCallState) return;
+
+    const { path, beforeHash } = toolCallState;
+    let afterHash: string | undefined;
+
+    // Capture after state
     if (toolName === 'delete') {
-      // After a delete, file shouldn't exist
       afterHash = undefined;
     } else if (existsSync(path)) {
       const content = await readFile(path);
@@ -146,30 +136,29 @@ async function onToolExecutionEnd(event: ToolExecutionEndEvent, ctx: ExtensionCo
       afterHash = hash;
       await state.objectStore.store(hash, content);
     }
-  } catch {
-    // File may not be readable after operation
+
+    // Determine operation type
+    const op = getFileOpType(toolName, { file_path: path });
+
+    // Append file_op entry to session
+    const fileOp: FileOp = {
+      toolCallId,
+      path,
+      op,
+      before: beforeHash,
+      after: afterHash,
+      ts: Date.now(),
+    };
+
+    // Cast sessionManager to full SessionManager to access appendCustomEntry
+    const sessionManager = ctx.sessionManager as SessionManager;
+    sessionManager.appendCustomEntry('file_op', fileOp);
+
+    // Clean up tool call state
+    state.toolCalls.delete(toolCallId);
+  } catch (err) {
+    console.error('[pi-crumbs] Error in onToolExecutionEnd:', err);
   }
-
-  // Determine operation type
-  const op = getFileOpType(toolName, { file_path: path });
-
-  // Append file_op entry to session
-  const fileOp: FileOp = {
-    toolCallId,
-    path,
-    op,
-    before: beforeHash,
-    after: afterHash,
-    ts: Date.now(),
-  };
-
-  // Cast sessionManager to full SessionManager to access appendCustomEntry
-  // The readonly type is for type safety, but at runtime it's a full SessionManager
-  const sessionManager = ctx.sessionManager as SessionManager;
-  sessionManager.appendCustomEntry('file_op', fileOp);
-
-  // Clean up tool call state
-  state.toolCalls.delete(toolCallId);
 }
 
 /**
@@ -183,10 +172,3 @@ export default function (pi: ExtensionAPI) {
   // Log initialization
   console.log('[pi-crumbs] Initialized - tracking file operations');
 }
-
-// Export utilities for external use
-export { ObjectStore } from './object-store.js';
-export { sha256, hashFile } from './hash.js';
-export * from './git-objects.js';
-export * from './file-diff.js';
-export * from './types.js';
