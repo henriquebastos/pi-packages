@@ -145,8 +145,12 @@ export default function qqExtension(pi: ExtensionAPI): void {
 			{ role: "user" as const, content: [{ type: "text" as const, text: question }], timestamp: Date.now() },
 		];
 
-		let apiKey: string;
-		try { apiKey = await ctx.modelRegistry.getApiKey(ctx.model); }
+		let apiKey: string | undefined;
+		try {
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+			if (!auth.ok) { ctx.ui.notify(`Could not retrieve API key: ${auth.error}`, "error"); return; }
+			apiKey = auth.apiKey;
+		}
 		catch { ctx.ui.notify("Could not retrieve API key for quick question", "error"); return; }
 
 		const thinkingLevel = pi.getThinkingLevel();
