@@ -59,7 +59,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
  *
  * For all other providers, pass the registry key unchanged.
  */
-function resolveApiKey(provider: string | undefined, registryApiKey: string): string | undefined {
+function resolveApiKey(provider: string | undefined, registryApiKey: string | undefined): string | undefined {
 	if (provider === "vertex" || provider === "google-vertex") {
 		return undefined;
 	}
@@ -190,8 +190,9 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_before_compact", async (event, ctx) => {
 		if (!ctx.model) return;
 
-		const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
-		if (!apiKey) return;
+		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+		if (!auth.ok) return;
+		const apiKey = auth.apiKey;
 
 		const effectiveApiKey = resolveApiKey(ctx.model?.provider, apiKey);
 
