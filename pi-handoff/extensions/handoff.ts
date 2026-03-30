@@ -188,7 +188,9 @@ async function generateHandoffPrompt(
 		loader.onAbort = () => done(null);
 
 		const run = async () => {
-			const apiKey = await ctx.modelRegistry.getApiKey(ctx.model!);
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model!);
+			if (!auth.ok) throw new Error(auth.error);
+			const apiKey = auth.apiKey;
 
 			const userMessage: Message = {
 				role: "user",
