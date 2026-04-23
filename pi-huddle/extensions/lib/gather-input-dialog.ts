@@ -447,7 +447,7 @@ export class GatherInputDialog implements Component, Focusable {
 					lines.push(truncateToWidth(`${prefix}${t.fg("dim", wrappedLines[i])}`, width));
 				} else {
 					const padding = " ".repeat(prefixWidth + numWidth + 1);
-					lines.push(truncateToWidth(`${padding}${wrappedLines[i])}`, width));
+					lines.push(truncateToWidth(`${padding}${wrappedLines[i]}`, width));
 				}
 			}
 		} else {
